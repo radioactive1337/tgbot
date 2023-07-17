@@ -4,65 +4,109 @@ import telebot
 import logging
 
 from requests import Session
-from datetime import datetime
 from telebot import types
 from telebot.async_telebot import AsyncTeleBot
 
 from bot_data import token
 from bot_data import cmc_api_key
+from bot_data import coins
 
 bot = AsyncTeleBot(token)
 logger = telebot.logger
 telebot.logger.setLevel(logging.DEBUG)
-now = datetime.now()
-current_time = now.strftime("%H:%M")
 
 
-def market_gatherer():
-    url = "https://pro-api.coinmarketcap.com/v1/global-metrics/quotes/latest"
+class InfoCollector:
     headers = {
         'Accepts': 'application/json',
         'X-CMC_PRO_API_KEY': f'{cmc_api_key}',
     }
-    session = Session()
-    session.headers.update(headers)
-    req = session.get(url)
-    data = req.json()
-    total_market_cap = float(data.get("data").get("quote").get("USD").get("total_market_cap"))
-    total_volume_24h = float(data.get("data").get("quote").get("USD").get("total_volume_24h"))
-    total_mcap_percentage_change = float(
-        data.get("data").get("quote").get("USD").get("total_market_cap_yesterday_percentage_change"))
-    btc_dominance = float(data.get("data").get("btc_dominance"))
-    return (f"market cap   -->   {'{0:,}'.format(round(total_market_cap)).replace(',', ' ')}\n"
-            f"24h volume   -->   {'{0:,}'.format(round(total_volume_24h)).replace(',', ' ')}\n"
-            f"mcap change %   -->   {'{0:,}'.format(round(total_mcap_percentage_change, 3)).replace(',', ' ')}\n"
-            f"btc dominance   -->   {'{0:,}'.format(round(btc_dominance, 3)).replace(',', ' ')}")
+
+    @staticmethod
+    def market_gatherer(h=headers):
+        url = "https://pro-api.coinmarketcap.com/v1/global-metrics/quotes/latest"
+        session = Session()
+        session.headers.update(h)
+        req = session.get(url)
+        data = req.json()
+        total_market_cap = float(data.get("data").get("quote").get("USD").get("total_market_cap"))
+        total_volume_24h = float(data.get("data").get("quote").get("USD").get("total_volume_24h"))
+        total_mcap_percentage_change = float(
+            data.get("data").get("quote").get("USD").get("total_market_cap_yesterday_percentage_change"))
+        btc_dominance = float(data.get("data").get("btc_dominance"))
+        return (f"market cap   -->   {'{0:,}'.format(round(total_market_cap)).replace(',', ' ')}\n"
+                f"24h volume   -->   {'{0:,}'.format(round(total_volume_24h)).replace(',', ' ')}\n"
+                f"mcap change %   -->   {'{0:,}'.format(round(total_mcap_percentage_change, 3)).replace(',', ' ')}\n"
+                f"btc dominance   -->   {'{0:,}'.format(round(btc_dominance, 3)).replace(',', ' ')}")
+
+    @staticmethod
+    def coin_info_gatherer(h=headers, symbol="btc"):
+        url = "https://pro-api.coinmarketcap.com/v2/cryptocurrency/quotes/latest"
+        par = {
+            "symbol": f"{symbol}"
+        }
+        session = Session()
+        session.headers.update(h)
+        req = session.get(url, params=par)
+        data = req.json()
+        symbol = data.get("data").get(f"{symbol}")[0].get("symbol")
+        price = float(data.get("data").get(f"{symbol}")[0].get("quote").get("USD").get("price"))
+        percent_change_30d = float(
+            data.get("data").get(f"{symbol}")[0].get("quote").get("USD").get("percent_change_30d"))
+        market_cap = float(data.get("data").get(f"{symbol}")[0].get("quote").get("USD").get("market_cap"))
+        market_cap_dominance = float(
+            data.get("data").get(f"{symbol}")[0].get("quote").get("USD").get("market_cap_dominance"))
+        return (f"{symbol}\n"
+                f"price   -->   {round(price, 3)}\n"
+                f"30d change %   -->   {round(percent_change_30d, 3)}\n"
+                f"mcap   -->   {'{0:,}'.format(round(market_cap)).replace(',', ' ')}\n"
+                f"dominance   -->   {round(market_cap_dominance, 3)}")
 
 
-def news_gatherer():
-    pass
+Info = InfoCollector()
 
 
 async def send_market_info(chat_id) -> None:
-    await bot.send_message(chat_id, market_gatherer())
+    await bot.send_message(chat_id, Info.market_gatherer())
+
+
+async def send_coin_info(chat_id) -> None:
+    await bot.send_message(chat_id, Info.coin_info_gatherer(symbol="BTC"))
 
 
 @bot.message_handler(commands=["start"])
 async def send_welcome(message):
     start_markup = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=False)
     start_markup.row('/start', '/xxx', '/xxx')
-    start_markup.row('/market', '/stop', '/token')
-    await bot.reply_to(message, "Hi!", reply_markup=start_markup)
+    start_markup.row('/market', '/stop', '/crypto')
+    await bot.send_message(message.chat.id, "Hi!", reply_markup=start_markup)
+
+
+@bot.message_handler(commands=['crypto'])
+async def command_crypto(message):
+    coins_markup = types.InlineKeyboardMarkup(row_width=1)
+    for i in coins:
+        coins_markup.add(types.InlineKeyboardButton(text=i, callback_data=i))
+    await bot.send_message(message.chat.id, "📃 Choose the coin:", reply_markup=coins_markup)
+
+
+@bot.callback_query_handler(func=lambda call: True)
+async def callback_crypto_stocks(call):
+    req = call.data.split('_')
+    coins_markup = types.InlineKeyboardMarkup(row_width=1)
+    for i in coins:
+        if req[0] == i:
+            continue
+        else:
+            coins_markup.add(types.InlineKeyboardButton(text=i, callback_data=i))
+    await bot.edit_message_text(Info.coin_info_gatherer(symbol=f"{req[0]}"), reply_markup=coins_markup,
+                                chat_id=call.message.chat.id, message_id=call.message.message_id)
 
 
 @bot.message_handler(commands=["market"])
 async def set_market_timer(message):
-    aioschedule.every(4).day.at("9:30").do(send_market_info, message.chat.id)
-
-
-@bot.message_handler(commands=["news"])
-async def set_news_timer(message):
-    pass
+    await bot.send_message(message.chat.id, "market sender every day at 9:30")
+    aioschedule.every().day.at("9:30").do(send_market_info, message.chat.id)
 
 
 @bot.message_handler(commands=["stop"])
