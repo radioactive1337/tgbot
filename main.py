@@ -3,75 +3,21 @@ import aioschedule
 import telebot
 import logging
 
-from requests import Session
 from telebot import types
 from telebot.async_telebot import AsyncTeleBot
 
+from InfoCollector import InfoCollector
 from bot_data import token
-from bot_data import cmc_api_key
 from bot_data import coins
 
 bot = AsyncTeleBot(token)
 logger = telebot.logger
-telebot.logger.setLevel(logging.DEBUG)
-
-
-class InfoCollector:
-    headers = {
-        'Accepts': 'application/json',
-        'X-CMC_PRO_API_KEY': f'{cmc_api_key}',
-    }
-
-    @staticmethod
-    def market_gatherer(h=headers):
-        url = "https://pro-api.coinmarketcap.com/v1/global-metrics/quotes/latest"
-        session = Session()
-        session.headers.update(h)
-        req = session.get(url)
-        data = req.json()
-        total_market_cap = float(data.get("data").get("quote").get("USD").get("total_market_cap"))
-        total_volume_24h = float(data.get("data").get("quote").get("USD").get("total_volume_24h"))
-        total_mcap_percentage_change = float(
-            data.get("data").get("quote").get("USD").get("total_market_cap_yesterday_percentage_change"))
-        btc_dominance = float(data.get("data").get("btc_dominance"))
-        return (f"market cap   -->   {'{0:,}'.format(round(total_market_cap)).replace(',', ' ')}\n"
-                f"24h volume   -->   {'{0:,}'.format(round(total_volume_24h)).replace(',', ' ')}\n"
-                f"mcap change %   -->   {'{0:,}'.format(round(total_mcap_percentage_change, 3)).replace(',', ' ')}\n"
-                f"btc dominance   -->   {'{0:,}'.format(round(btc_dominance, 3)).replace(',', ' ')}")
-
-    @staticmethod
-    def coin_info_gatherer(h=headers, symbol="btc"):
-        url = "https://pro-api.coinmarketcap.com/v2/cryptocurrency/quotes/latest"
-        par = {
-            "symbol": f"{symbol}"
-        }
-        session = Session()
-        session.headers.update(h)
-        req = session.get(url, params=par)
-        data = req.json()
-        symbol = data.get("data").get(f"{symbol}")[0].get("symbol")
-        price = float(data.get("data").get(f"{symbol}")[0].get("quote").get("USD").get("price"))
-        percent_change_30d = float(
-            data.get("data").get(f"{symbol}")[0].get("quote").get("USD").get("percent_change_30d"))
-        market_cap = float(data.get("data").get(f"{symbol}")[0].get("quote").get("USD").get("market_cap"))
-        market_cap_dominance = float(
-            data.get("data").get(f"{symbol}")[0].get("quote").get("USD").get("market_cap_dominance"))
-        return (f"{symbol}\n"
-                f"price   -->   {round(price, 3)}\n"
-                f"30d change %   -->   {round(percent_change_30d, 3)}\n"
-                f"mcap   -->   {'{0:,}'.format(round(market_cap)).replace(',', ' ')}\n"
-                f"dominance   -->   {round(market_cap_dominance, 3)}")
-
-
-Info = InfoCollector()
+telebot.logger.setLevel(logging.INFO)
+IC = InfoCollector()
 
 
 async def send_market_info(chat_id) -> None:
-    await bot.send_message(chat_id, Info.market_gatherer())
-
-
-async def send_coin_info(chat_id) -> None:
-    await bot.send_message(chat_id, Info.coin_info_gatherer(symbol="BTC"))
+    await bot.send_message(chat_id, IC.market_gatherer())
 
 
 @bot.message_handler(commands=["start"])
@@ -99,7 +45,7 @@ async def callback_crypto_stocks(call):
             continue
         else:
             coins_markup.add(types.InlineKeyboardButton(text=i, callback_data=i))
-    await bot.edit_message_text(Info.coin_info_gatherer(symbol=f"{req[0]}"), reply_markup=coins_markup,
+    await bot.edit_message_text(IC.coin_info_gatherer(symbol=f"{req[0]}"), reply_markup=coins_markup,
                                 chat_id=call.message.chat.id, message_id=call.message.message_id)
 
 
@@ -110,8 +56,8 @@ async def set_market_timer(message):
 
 
 @bot.message_handler(commands=["stop"])
-async def stop_scheduler(m):
-    await bot.send_message(m.chat.id, "stopping market sender")
+async def stop_scheduler(message):
+    await bot.send_message(message.chat.id, "stopping market sender")
     aioschedule.cancel_job(aioschedule.jobs[0])
 
 
