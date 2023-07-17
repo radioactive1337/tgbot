@@ -1,2 +1,2 @@
 token = ""
-user_id = 
+cmc_api_key = ""
