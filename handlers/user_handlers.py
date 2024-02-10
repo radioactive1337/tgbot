@@ -1,5 +1,5 @@
-from aiogram import types, Router
-from aiogram.filters import CommandStart, Command
+from aiogram import F, types, Router
+from aiogram.filters import CommandStart, Command, or_f
 
 user_router = Router()
 
@@ -14,16 +14,11 @@ async def menu_cmd(message: types.Message):
     await message.answer("here is...menu")
 
 
-@user_router.message(Command('topdex'))
+@user_router.message(or_f(Command('stats'), (F.text.lower().contains('stat') | F.text.lower().contains('стат'))))
 async def menu_cmd(message: types.Message):
-    await message.answer("here is...top exchanges")
+    await message.answer("here is...statistics!")
 
 
-@user_router.message(Command('toptoken'))
-async def menu_cmd(message: types.Message):
-    await message.answer("here is...top tokens")
-
-
-@user_router.message()
+@user_router.message(~(F.text.lower().contains('aa')) | F.text.lower().contains('qq'))
 async def message(message: types.Message):
-    await message.answer(message.text)
+    await message.answer('xd')
