@@ -1,7 +1,10 @@
 from aiogram import F, types, Router
 from aiogram.filters import CommandStart, Command, or_f
 
+from filters.chat_types import ChatType
+
 user_router = Router()
+user_router.message.filter(ChatType(['private']))
 
 
 @user_router.message(CommandStart())
@@ -19,6 +22,6 @@ async def menu_cmd(message: types.Message):
     await message.answer("here is...statistics!")
 
 
-@user_router.message(~(F.text.lower().contains('aa')) | F.text.lower().contains('qq'))
+@user_router.message(~(F.text.lower().contains('test')) | F.text.lower().contains('qq'))
 async def message(message: types.Message):
     await message.answer('xd')
