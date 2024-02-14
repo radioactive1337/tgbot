@@ -2,6 +2,7 @@ from aiogram import F, types, Router
 from aiogram.filters import CommandStart, Command, or_f
 
 from filters.chat_types import ChatType
+from keyboards import reply_kb
 
 user_router = Router()
 user_router.message.filter(ChatType(['private']))
@@ -9,7 +10,9 @@ user_router.message.filter(ChatType(['private']))
 
 @user_router.message(CommandStart())
 async def start_cmd(message: types.Message):
-    await message.answer(f"hi, {message.chat.username}")
+    await message.answer(f"<b>hi, {message.chat.username}</b>",
+                         reply_markup=reply_kb.start_kb.as_markup(resize_keyboard=True,
+                                                                  input_field_placeholder='¯\_(ツ)_/¯'))
 
 
 @user_router.message(Command('menu'))
